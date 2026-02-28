@@ -1,0 +1,67 @@
+# Environment / secrets
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+dist/
+*.egg-info/
+.eggs/
+
+# Virtual environments
+.venv/
+venv/
+env/
+ENV/
+
+# Testing & coverage
+.coverage
+.coverage.*
+htmlcov/
+coverage.xml
+.pytest_cache/
+.tox/
+
+# Type checking
+.mypy_cache/
+
+# Linting
+.ruff_cache/
+
+# Security scanning
+.secrets.baseline
+bandit-results.sarif
+pip-audit-results.json
+pip-audit-results.sarif
+
+# IDEs
+.idea/
+*.swp
+*.swo
+.DS_Store
+
+# Docker
+.dockerignore
+
+# Logs
+*.log
+logs/
+
+# Distribution / packaging
+*.tar.gz
+*.whl
+
+# uv
+.uv/
+uv.lock   # commit this if you want reproducible builds with uv
+
+# Node (if using any JS tooling)
+node_modules/

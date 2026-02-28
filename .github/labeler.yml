@@ -1,0 +1,67 @@
+# GitHub Actions PR Labeler configuration
+# Requires: actions/labeler@v5 in a workflow
+# Usage: add a labeler.yml workflow that calls actions/labeler
+
+# Label: feature
+feature:
+  - head-branch:
+      - "^feature/.*"
+
+# Label: bug
+bug:
+  - head-branch:
+      - "^fix/.*"
+
+# Label: chore
+chore:
+  - head-branch:
+      - "^chore/.*"
+
+# Label: refactor
+refactor:
+  - head-branch:
+      - "^refactor/.*"
+
+# Label: release
+release:
+  - head-branch:
+      - "^release/.*"
+
+# Label: ci
+ci:
+  - changed-files:
+      - any-glob-to-any-file:
+          - ".github/workflows/**"
+          - ".github/dependabot.yml"
+          - ".github/labeler.yml"
+
+# Label: docs
+docs:
+  - changed-files:
+      - any-glob-to-any-file:
+          - "docs/**"
+          - "*.md"
+          - ".claude/**"
+
+# Label: deps
+deps:
+  - changed-files:
+      - any-glob-to-any-file:
+          - "pyproject.toml"
+          - "requirements*.txt"
+          - "poetry.lock"
+          - "uv.lock"
+
+# Label: tests
+tests:
+  - changed-files:
+      - any-glob-to-any-file:
+          - "tests/**"
+
+# Label: docker
+docker:
+  - changed-files:
+      - any-glob-to-any-file:
+          - "Dockerfile"
+          - "docker-compose*.yml"
+          - ".dockerignore"

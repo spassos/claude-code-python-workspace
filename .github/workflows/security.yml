@@ -1,0 +1,141 @@
+name: Security Scan
+
+on:
+  push:
+    branches:
+      - main
+      - develop
+  pull_request:
+    branches:
+      - main
+      - develop
+  schedule:
+    # Every Monday at 09:00 UTC
+    - cron: "0 9 * * 1"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  security-events: write  # Required to upload SARIF to GitHub Security tab
+
+jobs:
+  bandit:
+    name: SAST (bandit)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install bandit
+        run: pip install bandit[sarif]
+
+      - name: Run bandit
+        run: |
+          bandit \
+            -r src/ \
+            -f sarif \
+            -o bandit-results.sarif \
+            --severity-level medium \
+            --confidence-level medium \
+            || true  # Don't fail the step — let GitHub Security tab handle reporting
+
+      - name: Upload SARIF to GitHub Security
+        uses: github/codeql-action/upload-sarif@v3
+        if: always()
+        with:
+          sarif_file: bandit-results.sarif
+          category: bandit
+
+      - name: Fail on HIGH severity findings
+        run: |
+          # Re-run in text mode to check for HIGH findings and fail the build
+          bandit \
+            -r src/ \
+            --severity-level high \
+            --confidence-level high \
+            --exit-zero  # we control exit manually below
+
+          HIGH_COUNT=$(bandit -r src/ -f json --severity-level high 2>/dev/null | python3 -c "
+          import json, sys
+          data = json.load(sys.stdin)
+          print(len(data.get('results', [])))
+          " 2>/dev/null || echo "0")
+
+          if [ "$HIGH_COUNT" -gt 0 ]; then
+            echo "Found $HIGH_COUNT HIGH severity security issue(s). Build failed."
+            bandit -r src/ --severity-level high
+            exit 1
+          fi
+          echo "No HIGH severity findings."
+
+  pip-audit:
+    name: Dependency CVE Scan (pip-audit)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: "pip"
+
+      - name: Install pip-audit
+        run: pip install pip-audit
+
+      - name: Install project dependencies
+        run: |
+          pip install --upgrade pip
+          # Adjust to match your dependency manager:
+          pip install -e ".[dev]"
+
+      - name: Run pip-audit
+        run: |
+          pip-audit \
+            --format=json \
+            --output=pip-audit-results.json \
+            || true  # capture output regardless of exit code
+
+      - name: Convert pip-audit results to SARIF
+        run: |
+          python3 << 'EOF'
+          import json, sys
+
+          with open("pip-audit-results.json") as f:
+              data = json.load(f)
+
+          results = []
+          for dep in data.get("dependencies", []):
+              for vuln in dep.get("vulns", []):
+                  results.append({
+                      "ruleId": vuln.get("id", "UNKNOWN"),
+                      "level": "error",
+                      "message": {
+                          "text": f"{dep['name']}=={dep['version']}: {vuln.get('description', 'No description')}"
+                      },
+                      "locations": [{"physicalLocation": {"artifactLocation": {"uri": "requirements.txt"}}}]
+                  })
+
+          sarif = {
+              "version": "2.1.0",
+              "$schema": "https://raw.githubusercontent.com/oasis-tcs/sarif-spec/master/Schemata/sarif-schema-2.1.0.json",
+              "runs": [{"tool": {"driver": {"name": "pip-audit", "rules": []}}, "results": results}]
+          }
+
+          with open("pip-audit-results.sarif", "w") as f:
+              json.dump(sarif, f, indent=2)
+
+          print(f"Found {len(results)} vulnerability(ies)")
+          sys.exit(1 if results else 0)
+          EOF
+
+      - name: Upload SARIF to GitHub Security
+        uses: github/codeql-action/upload-sarif@v3
+        if: always()
+        with:
+          sarif_file: pip-audit-results.sarif
+          category: pip-audit

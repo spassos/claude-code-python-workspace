@@ -1,0 +1,58 @@
+version: 2
+
+updates:
+  # Python dependencies (pip / pyproject.toml)
+  - package-ecosystem: "pip"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+      time: "09:00"
+      timezone: "America/Sao_Paulo"
+    open-pull-requests-limit: 10
+    target-branch: "develop"
+    labels:
+      - "deps"
+      - "python"
+    commit-message:
+      prefix: "chore(deps)"
+    reviewers: []  # Add GitHub usernames if desired
+    groups:
+      # Group patch/minor updates to reduce PR noise
+      dev-dependencies:
+        patterns:
+          - "pytest*"
+          - "ruff"
+          - "mypy"
+          - "bandit"
+          - "pip-audit"
+          - "pre-commit"
+          - "detect-secrets"
+        update-types:
+          - "minor"
+          - "patch"
+      production-dependencies:
+        patterns:
+          - "fastapi"
+          - "uvicorn"
+          - "pydantic*"
+          - "anthropic"
+          - "httpx"
+        update-types:
+          - "patch"
+
+  # GitHub Actions
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+      time: "09:00"
+      timezone: "America/Sao_Paulo"
+    open-pull-requests-limit: 5
+    target-branch: "develop"
+    labels:
+      - "deps"
+      - "github-actions"
+    commit-message:
+      prefix: "chore(ci)"
