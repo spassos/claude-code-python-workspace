@@ -10,6 +10,16 @@ Example: `/linear-dev SPA-26`
 
 ---
 
+## How Agents Work
+
+Custom agents live in `.claude/agents/`. They are invoked via the `Agent` tool with
+`subagent_type: "general-purpose"` — with a prompt that instructs the agent to **read
+the corresponding `.claude/agents/<name>.md` file first**, then follow its instructions.
+
+This pattern applies to: `plan`, `implementer`, `pr`, `spec`, `deploy`.
+
+---
+
 ## Steps
 
 ### 1. Fetch the Linear Issue
@@ -54,42 +64,58 @@ Otherwise derive it: `feat/spa-<N>-<short-slug>`.
 
 ### 4. Spawn Plan Agent
 
-Use the `Agent` tool with `subagent_type: "plan"` to design the implementation plan.
-Pass the spec file path and issue context. Wait for the plan agent to present the plan.
+Use the `Agent` tool with `subagent_type: "general-purpose"`. In the prompt, include:
 
-**Do not proceed until the plan is approved by the user.**
+```
+Working directory: <absolute-path>
+Read and follow the instructions in `.claude/agents/plan.md`.
+
+Context:
+- Spec file: <spec-path>
+- Linear issue: <ISSUE-ID> — <title>
+- Issue description: <description>
+```
+
+Wait for the agent to present the plan via EnterPlanMode. **Do not proceed until the user approves the plan.**
 
 ### 5. Spawn Implementer Agent
 
-Use the `Agent` tool with `subagent_type: "implementer"` to write the code.
-Pass:
-- Spec file path
-- Approved plan details
-- Linear issue ID
+Use the `Agent` tool with `subagent_type: "general-purpose"`. In the prompt, include:
 
-Wait for the implementer to finish and report a summary.
+```
+Working directory: <absolute-path>
+Read and follow the instructions in `.claude/agents/implementer.md`.
+
+Context:
+- Spec file: <spec-path>
+- Approved plan: <full plan details from step 4>
+- Linear issue: <ISSUE-ID>
+```
+
+Wait for the agent to finish and report a summary of all files created/modified.
 
 ### 6. Run Tests
 
 Execute the full quality gate:
 ```bash
-pytest tests/ --cov=src --cov-report=term-missing --cov-fail-under=80 -v
+cd <working-directory>
+python -m pytest tests/ --cov=src --cov-report=term-missing --cov-fail-under=80 -v
 mypy src/
 ruff check . && ruff format --check .
 ```
 
-**If any check fails:**
-- Fix the failures inline (do not skip)
-- Re-run until all checks pass
-- Do not proceed to commit with red tests
+**If any check fails**, spawn the implementer agent again (same pattern as step 5) to fix
+the failures. Pass the full error output in the prompt. Re-run the quality gate after.
+Do not proceed to commit until all checks pass.
 
 ### 7. Stage and Commit
 
+Stage only the feature files (not `.claude/`, `scripts/`, `CLAUDE.md`):
 ```bash
-git add -p   # review what is staged
+git add src/ tests/ docs/specs/ pyproject.toml .env.example infra/ .github/
 ```
 
-Then run the commit workflow (conventional commit format):
+Then commit in conventional format:
 ```bash
 git commit -m "$(cat <<'EOF'
 feat(<scope>): <description from issue title>
@@ -97,6 +123,8 @@ feat(<scope>): <description from issue title>
 <body: what was implemented and why>
 
 Closes <ISSUE-ID>
+
+Co-Authored-By: Claude Sonnet 4.6 <noreply@anthropic.com>
 EOF
 )"
 ```
@@ -107,36 +135,38 @@ EOF
 git push -u origin <branch-name>
 ```
 
-Use the `Agent` tool with `subagent_type: "pr"` to open the PR with full description linking to the Linear issue.
-Pass:
-- Current branch name
-- Linear issue ID and title
-- List of implemented files (from implementer summary)
+Use the `Agent` tool with `subagent_type: "general-purpose"`. In the prompt, include:
+
+```
+Working directory: <absolute-path>
+Read and follow the instructions in `.claude/agents/pr.md`.
+
+Context:
+- Branch: <branch-name>
+- Linear issue: <ISSUE-ID> — <title>
+- Implemented files: <list from implementer summary>
+```
 
 ### 9. Update Linear Issue
 
 After the PR is open:
-- Use `mcp__linear__save_issue` to update the issue:
-  - Add PR URL as a link attachment
-  - Move status to `In Review` (if that state exists)
-  - Add a comment with the PR URL:
+- Use `mcp__linear__save_issue` to add the PR URL as a link and move to `In Review`
+- Use `mcp__linear__create_comment`:
 
 ```
-mcp__linear__create_comment:
-  issueId: <issue-id>
-  body: "PR aberto: <PR_URL>\n\nWorkflow executado automaticamente via `/linear-dev`."
+PR aberto: <PR_URL>
+
+Workflow executado automaticamente via `/linear-dev`.
 ```
 
 ### 10. Report Summary
 
-Print a final summary:
 ```
 ## /linear-dev Summary
 
 **Issue**: <ID> — <Title>
 **Branch**: <branch-name>
 **PR**: <PR_URL>
-**CI**: <link to GitHub Actions run>
 
 ### Implemented
 - <bullet per major deliverable>
